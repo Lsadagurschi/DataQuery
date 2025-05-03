@@ -48,7 +48,7 @@ def show_login_page():
                 st.session_state.authenticated = True
                 st.session_state.user = {"username": username}
                 st.success("Login realizado com sucesso!")
-                st.experimental_rerun()
+                st.rerun()  # Corrigido: experimental_rerun → rerun
             else:
                 st.error("Usuário ou senha inválidos")
 
@@ -145,8 +145,9 @@ def main():
                     st.code(query, language="sql")
         
         if st.button("Sair"):
-            st.session_state.clear()
-            st.experimental_rerun()
+            for key in list(st.session_state.keys()):
+                del st.session_state[key]
+            st.rerun()  # Corrigido: experimental_rerun → rerun
     
     # Área principal
     if st.session_state.is_connected or st.session_state.is_demo:
@@ -176,7 +177,7 @@ def main():
             tabs = st.tabs(["📊 Resultados", "📝 SQL", "📈 Visualização"])
             
             with tabs[0]:
-                if "current_results" in st.session_state:
+                if "current_results" in st.session_state and st.session_state.current_results is not None:
                     st.dataframe(st.session_state.current_results)
                 else:
                     st.info("Execute a consulta para ver resultados")
@@ -189,7 +190,8 @@ def main():
                     df = st.session_state.current_results
                     if len(df.columns) >= 2:
                         x_col = df.columns[0]
-                        y_col = df.columns[1] if df.dtypes[1] != 'object' else df.columns[0]
+                        y_col = df.columns[1] if len(df.columns) > 1 and pd.api.types.is_numeric_dtype(df[df.columns[1]]) else df.columns[0]
+                        
                         chart_type = st.selectbox("Tipo de gráfico", ["Barra", "Linha", "Pizza"])
                         
                         if chart_type == "Barra":
@@ -199,11 +201,17 @@ def main():
                         else:
                             # Para Pizza, precisamos de um valor numérico
                             try:
-                                numeric_col = next(col for col in df.columns if df[col].dtype in ['int64', 'float64'])
-                                fig = {"data": [{"type": "pie", "labels": df[x_col], "values": df[numeric_col]}]}
-                                st.plotly_chart(fig)
-                            except:
-                                st.error("Não foi possível criar um gráfico de pizza com estes dados.")
+                                import plotly.express as px
+                                # Encontrar coluna numérica
+                                numeric_cols = df.select_dtypes(include=['int64', 'float64']).columns.tolist()
+                                if numeric_cols:
+                                    numeric_col = numeric_cols[0]
+                                    fig = px.pie(df, names=x_col, values=numeric_col)
+                                    st.plotly_chart(fig)
+                                else:
+                                    st.error("Não há colunas numéricas para criar gráfico de pizza")
+                            except Exception as e:
+                                st.error(f"Erro ao criar gráfico: {str(e)}")
                     else:
                         st.warning("Os dados não têm colunas suficientes para visualização.")
                 else:
