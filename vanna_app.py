@@ -24,7 +24,7 @@ def get_secret(key, default=None):
     return os.environ.get(key, default)
 
 # Configurações da API Vanna
-VANNA_API_KEY = get_secret("VANNA_API_KEY", "")
+VANNA_API_KEY = get_secret("vn-1ab906ca575147a19e6859f701f51651", "")
 
 # Inicializar estados da sessão
 if 'authenticated' not in st.session_state:
