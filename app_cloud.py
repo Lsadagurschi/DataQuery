@@ -540,10 +540,12 @@ def main():
                     st.info("Execute a consulta para ver uma visualização dos dados aqui.")
                     
     else:
-        
-# Modo de demonstração
-if 'is_demo' not in st.session_state:
-    st.session_state.is_demo = False
+ if st.session_state.is_connected:
+    # código para conexão estabelecida
+else:
+    # Modo de demonstração
+    if 'is_demo' not in st.session_state:
+        st.session_state.is_demo = False       
 
 if not st.session_state.is_connected and not st.session_state.is_demo:
     if st.button("Ver Demonstração Completa"):
