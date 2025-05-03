@@ -1,17 +1,18 @@
 import streamlit as st
 import pandas as pd
 import os
+import sys
 from dotenv import load_dotenv
 import time
 import datetime
-import sys
 import plotly.express as px
 from pathlib import Path
 
-# Adicionar os diretórios ao path
-script_dir = Path(__file__).parent.absolute()
-sys.path.append(str(script_dir))
+# Ajuste de caminho para localizar os módulos
+current_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(current_dir)  # Adiciona o diretório atual ao path
 
+# Agora importa os módulos
 from modules.db_connector import DBConnector
 from modules.sql_generator import SQLGenerator
 from modules.visualizer import DataVisualizer
@@ -19,6 +20,7 @@ from modules.security import SecurityManager
 from modules.data_protection import DataProtector
 from config import get_config
 from security_config import get_security_config
+
 
 # Carregar variáveis de ambiente
 try:
