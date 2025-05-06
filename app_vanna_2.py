@@ -352,4 +352,243 @@ class VannaManager:
             st.error(f"Erro ao executar e visualizar: {e}")
             return None, None, None
 
-# [O resto do código permanece igual]
+# Função principal para a interface do Streamlit
+def main():
+    # Inicializar os gerenciadores
+    if 'user_manager' not in st.session_state:
+        st.session_state.user_manager = UserManager()
+    
+    if 'db_manager' not in st.session_state:
+        st.session_state.db_manager = DatabaseManager()
+    
+    if 'vanna_manager' not in st.session_state:
+        st.session_state.vanna_manager = VannaManager()
+    
+    # Verificar se o usuário está logado
+    if 'logged_in' not in st.session_state:
+        st.session_state.logged_in = False
+    
+    if 'username' not in st.session_state:
+        st.session_state.username = None
+    
+    # Página de login/registro
+    if not st.session_state.logged_in:
+        st.title("🔐 Login / Registro")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.subheader("Login")
+            login_username = st.text_input("Usuário", key="login_user")
+            login_password = st.text_input("Senha", type="password", key="login_pass")
+            
+            if st.button("Login"):
+                if st.session_state.user_manager.authenticate(login_username, login_password):
+                    st.session_state.logged_in = True
+                    st.session_state.username = login_username
+                    st.rerun()
+                else:
+                    st.error("Nome de usuário ou senha inválidos!")
+        
+        with col2:
+            st.subheader("Registro")
+            reg_username = st.text_input("Novo Usuário", key="reg_user")
+            reg_password = st.text_input("Nova Senha", type="password", key="reg_pass")
+            reg_password2 = st.text_input("Confirme a Senha", type="password", key="reg_pass2")
+            
+            if st.button("Registrar"):
+                if reg_password != reg_password2:
+                    st.error("As senhas não coincidem!")
+                elif st.session_state.user_manager.register_user(reg_username, reg_password):
+                    st.success("Usuário registrado com sucesso! Faça login.")
+                else:
+                    st.error("Usuário já existe!")
+    
+    # Aplicativo principal após o login
+    else:
+        st.sidebar.title(f"👤 Olá, {st.session_state.username}")
+        
+        # Opção para logout
+        if st.sidebar.button("Logout"):
+            st.session_state.logged_in = False
+            st.session_state.username = None
+            st.rerun()
+        
+        # Verificar se está conectado ao banco
+        if not st.session_state.db_manager.connected:
+            st.subheader("📊 Conectar ao Banco de Dados")
+            
+            with st.form("db_connection_form"):
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    host = st.text_input("Host", value="db.neon.tech")
+                    database = st.text_input("Database")
+                    port = st.text_input("Port", value="5432")
+                
+                with col2:
+                    user = st.text_input("Usuário")
+                    password = st.text_input("Senha", type="password")
+                
+                submit_button = st.form_submit_button("Conectar")
+                
+                if submit_button:
+                    if st.session_state.db_manager.connect(host, database, user, password, port):
+                        st.success("Conectado ao banco de dados com sucesso!")
+                        
+                        # Configurar Vanna.AI automaticamente após conexão com o banco
+                        with st.spinner("Configurando Vanna.AI automaticamente..."):
+                            if st.session_state.vanna_manager.initialize(st.session_state.db_manager.connection_params):
+                                st.success("Vanna.AI inicializado com sucesso!")
+                                
+                                # Treinar o modelo com o esquema do banco
+                                schema_df = st.session_state.db_manager.tables
+                                if schema_df is not None and not schema_df.empty:
+                                    with st.spinner("Treinando modelo com esquema do banco..."):
+                                        if st.session_state.vanna_manager.train_with_schema(schema_df):
+                                            st.success("Modelo treinado com sucesso!")
+                                        else:
+                                            st.warning("Houve alguns problemas no treinamento do modelo, mas você ainda pode usar o sistema.")
+                            else:
+                                st.error("Erro ao inicializar Vanna.AI!")
+                    else:
+                        st.error("Erro ao conectar ao banco de dados!")
+        
+        # Interface principal quando conectado ao banco e Vanna configurado
+        elif st.session_state.vanna_manager.initialized:
+            st.title("💬 DataTalk - Consultas em Linguagem Natural")
+            
+            # Tabs para diferentes funcionalidades
+            tab1, tab2, tab3, tab4 = st.tabs(["Consultas", "Favoritos", "Histórico", "Esquema do Banco"])
+            
+            with tab1:
+                st.subheader("🔎 Consulte seu banco de dados em linguagem natural")
+                
+                # Área de consulta
+                query = st.text_area("Digite sua pergunta em linguagem natural:", height=100)
+                
+                if st.button("Executar Consulta"):
+                    if query:
+                        with st.spinner("Gerando consulta SQL e executando..."):
+                            sql, df, fig = st.session_state.vanna_manager.execute_and_visualize(query)
+                            
+                            if sql:
+                                st.subheader("Consulta SQL Gerada:")
+                                st.code(sql, language="sql")
+                                
+                                # Adicionar à histórico mesmo que a execução falhe
+                                st.session_state.user_manager.add_to_history(
+                                    st.session_state.username, query, sql
+                                )
+                                
+                                if df is not None:
+                                    # Mostrar resultados
+                                    st.subheader("Resultados:")
+                                    st.dataframe(df)
+                                    
+                                    # Mostrar visualização se disponível
+                                    if fig is not None:
+                                        st.subheader("Visualização:")
+                                        st.plotly_chart(fig)
+                                    
+                                    # Opção para favoritar
+                                    col1, col2 = st.columns(2)
+                                    with col1:
+                                        fav_name = st.text_input("Nome para favoritar esta consulta (opcional):")
+                                    with col2:
+                                        if fav_name and st.button("Favoritar"):
+                                            st.session_state.user_manager.add_favorite(
+                                                st.session_state.username, fav_name, query, sql
+                                            )
+                                            st.success(f"Consulta '{fav_name}' adicionada aos favoritos!")
+                                else:
+                                    st.warning("A consulta foi gerada mas não retornou resultados ou ocorreu um erro na execução.")
+                                
+                                # Opção de feedback para melhorar o modelo
+                                st.subheader("Feedback")
+                                feedback_col1, feedback_col2 = st.columns(2)
+                                with feedback_col1:
+                                    if st.button("👍 Esta consulta está correta"):
+                                        st.session_state.vanna_manager.train_with_query(query, sql)
+                                        st.success("Obrigado pelo feedback! O modelo foi atualizado.")
+                                
+                                with feedback_col2:
+                                    if st.button("👎 Esta consulta está incorreta"):
+                                        st.warning("Por favor, forneça a versão correta da consulta abaixo.")
+                                
+                                correct_sql = st.text_area("Se a consulta estiver incorreta, você pode inserir a versão correta aqui:")
+                                
+                                if correct_sql and st.button("Enviar SQL correto"):
+                                    st.session_state.vanna_manager.train_with_query(query, correct_sql)
+                                    st.success("Obrigado pelo feedback! O modelo foi atualizado com sua versão correta.")
+                            else:
+                                st.error("Não foi possível gerar uma consulta SQL válida para esta pergunta.")
+            
+            with tab2:
+                st.subheader("⭐ Consultas Favoritas")
+                
+                favorites = st.session_state.user_manager.get_favorites(st.session_state.username)
+                
+                if favorites:
+                    for name, fav_data in favorites.items():
+                        with st.expander(name):
+                            st.markdown(f"**Pergunta:** {fav_data['query']}")
+                            st.code(fav_data['sql'], language="sql")
+                            
+                            if st.button(f"Executar '{name}'"):
+                                with st.spinner("Executando consulta favorita..."):
+                                    df = st.session_state.db_manager.execute_query(fav_data['sql'])
+                                    if df is not None:
+                                        st.dataframe(df)
+                else:
+                    st.info("Você ainda não tem consultas favoritas. Execute consultas e favorite-as para acessá-las rapidamente aqui.")
+            
+            with tab3:
+                st.subheader("📜 Histórico de Consultas")
+                
+                history = st.session_state.user_manager.get_history(st.session_state.username)
+                
+                if history:
+                    history.reverse()  # Mostrar as consultas mais recentes primeiro
+                    
+                    for i, item in enumerate(history):
+                        with st.expander(f"{item['timestamp']} - {item['query'][:50]}..." if len(item['query']) > 50 else f"{item['timestamp']} - {item['query']}"):
+                            st.markdown(f"**Pergunta:** {item['query']}")
+                            st.code(item['sql'], language="sql")
+                            
+                            if st.button(f"Executar novamente #{i}"):
+                                with st.spinner("Executando consulta do histórico..."):
+                                    df = st.session_state.db_manager.execute_query(item['sql'])
+                                    if df is not None:
+                                        st.dataframe(df)
+                else:
+                    st.info("Seu histórico de consultas está vazio. Execute algumas consultas para vê-las aqui.")
+            
+            with tab4:
+                st.subheader("🗄️ Esquema do Banco de Dados")
+                
+                if st.session_state.db_manager.tables is not None and not st.session_state.db_manager.tables.empty:
+                    # Agrupar por tabela para facilitar a visualização
+                    tables = st.session_state.db_manager.tables['table_name'].unique()
+                    
+                    for table in tables:
+                        with st.expander(f"Tabela: {table}"):
+                            table_schema = st.session_state.db_manager.tables[
+                                st.session_state.db_manager.tables['table_name'] == table
+                            ]
+                            st.dataframe(table_schema)
+                    
+                    # Opção para baixar o esquema completo
+                    csv = st.session_state.db_manager.tables.to_csv(index=False)
+                    st.download_button(
+                        label="Download do Esquema em CSV",
+                        data=csv,
+                        file_name="esquema_banco.csv",
+                        mime="text/csv"
+                    )
+                else:
+                    st.info("Nenhum esquema de banco de dados disponível.")
+
+# Executar o aplicativo
+if __name__ == "__main__":
+    main()
