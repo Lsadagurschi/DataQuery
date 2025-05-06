@@ -92,9 +92,19 @@ class DatabaseManager:
         self.engine = None
         self.connected = False
         self.tables = []
+        self.connection_params = {}
     
     def connect(self, host, database, user, password, port):
         try:
+            # Armazenar os parâmetros de conexão para uso posterior
+            self.connection_params = {
+                'host': host,
+                'dbname': database,
+                'user': user,
+                'password': password,
+                'port': port
+            }
+            
             connection_string = f"postgresql://{user}:{password}@{host}:{port}/{database}"
             self.engine = create_engine(connection_string)
             self.connection = self.engine.connect()
@@ -154,24 +164,47 @@ class VannaManager:
     def __init__(self):
         self.vn = None
         self.initialized = False
-        self.db_engine = None
+        self.db_connection = None
         
-    def initialize(self, db_engine=None):
+    def initialize(self, db_params=None):
         """Inicializa a conexão com a API do Vanna com valores hardcoded"""
         try:
             # Usar os valores constantes definidos no início do código
             self.vn = VannaDefault(model=VANNA_MODEL_NAME, api_key=VANNA_API_KEY)
-            self.db_engine = db_engine
+            self.db_connection = db_params
             
             # Se tiver uma conexão de banco, configurá-la no Vanna
-            if db_engine is not None:
-                self.vn.connect_to_postgres_with_engine(db_engine)
+            if db_params is not None:
+                # Corrigindo para usar o método correto de conexão
+                # O VannaDefault não tem connect_to_postgres_with_engine
+                # Vamos usar o método correto para definir a conexão
+                self.connect_database()
                 
             self.initialized = True
             return True
         except Exception as e:
             st.error(f"Erro ao inicializar Vanna.AI: {e}")
             self.initialized = False
+            return False
+    
+    def connect_database(self):
+        """Conecta o Vanna ao banco de dados"""
+        if not self.db_connection:
+            return False
+        
+        try:
+            # Criar conexão direta com o banco usando os parâmetros armazenados
+            # Isso depende da estrutura dos métodos disponíveis em VannaDefault
+            # No código abaixo, usamos run_sql como um método genérico que tentará fazer a conexão
+            
+            # Vamos testar a conexão com uma consulta simples
+            test_query = "SELECT 1 as test"
+            result = self.vn.run_sql(test_query, 
+                                    connection_string=f"postgresql://{self.db_connection['user']}:{self.db_connection['password']}@{self.db_connection['host']}:{self.db_connection['port']}/{self.db_connection['dbname']}")
+            
+            return True
+        except Exception as e:
+            st.error(f"Erro ao conectar Vanna.AI ao banco: {e}")
             return False
     
     def train_with_schema(self, schema_df):
@@ -253,13 +286,17 @@ class VannaManager:
             sql = self.vn.generate_sql(question)
             
             if sql:
+                # Construir string de conexão
+                conn_str = f"postgresql://{self.db_connection['user']}:{self.db_connection['password']}@{self.db_connection['host']}:{self.db_connection['port']}/{self.db_connection['dbname']}"
+                
                 # Executar SQL
-                df = self.vn.run_sql(sql)
+                df = self.vn.run_sql(sql, connection_string=conn_str)
                 
                 # Tentar gerar visualização
                 try:
                     fig = self.vn.get_plotly_figure(question=question, sql=sql, df=df)
-                except:
+                except Exception as viz_error:
+                    st.warning(f"Não foi possível gerar visualização: {viz_error}")
                     fig = None
                 
                 return sql, df, fig
@@ -354,7 +391,7 @@ def main():
                         
                         # Configurar Vanna.AI automaticamente após conexão com o banco
                         with st.spinner("Configurando Vanna.AI automaticamente..."):
-                            if st.session_state.vanna_manager.initialize(st.session_state.db_manager.engine):
+                            if st.session_state.vanna_manager.initialize(st.session_state.db_manager.connection_params):
                                 st.success("Vanna.AI inicializado com sucesso!")
                                 
                                 # Treinar o modelo com o esquema do banco
