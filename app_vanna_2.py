@@ -20,7 +20,7 @@ st.set_page_config(
 # Configuração do Vanna.AI como constante no backend
 VANNA_API_KEY = "vn-1ab906ca575147a19e6859f701f51651"
 VANNA_MODEL_NAME = "default"  # Você pode ajustar se necessário
-VANNA_EMAIL = "sadagurschi@gmail.com  # Email obrigatório para a API
+VANNA_EMAIL = "sadagurschi@gmail.com"  # Email obrigatório para a API
 
 # Classes para gerenciar usuários e autenticação
 class UserManager:
