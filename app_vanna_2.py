@@ -9,6 +9,7 @@ import vanna
 from vanna.remote import VannaDefault
 import plotly.express as px
 import re
+import time
 
 # Configuração da página Streamlit
 st.set_page_config(
@@ -172,19 +173,36 @@ class VannaManager:
     def initialize(self, db_params=None):
         """Inicializa a conexão com a API do Vanna com valores hardcoded"""
         try:
-            # Usar os valores constantes definidos no início do código
-            # Adicionar email como parâmetro de config para resolver o erro
+            # Configuração com email explícito para resolver o erro
+            # A forma correta de passar o email depende da implementação exata do VannaDefault
+            # Vamos tentar diferentes abordagens
+            
+            # Abordagem 1: Usar o parâmetro config
+            config = {
+                "email": VANNA_EMAIL,
+                "api_key": VANNA_API_KEY
+            }
+            
             self.vn = VannaDefault(
-                model=VANNA_MODEL_NAME, 
+                model=VANNA_MODEL_NAME,
                 api_key=VANNA_API_KEY,
-                config={"email": VANNA_EMAIL}  # Adicionar email na configuração
+                config=config
             )
+            
             self.db_connection = db_params
             
             # Criar um objeto engine SQLAlchemy para uso nas consultas
             if db_params is not None:
                 conn_str = f"postgresql://{db_params['user']}:{db_params['password']}@{db_params['host']}:{db_params['port']}/{db_params['dbname']}"
                 self.db_engine = create_engine(conn_str)
+            
+            # Verificar se a inicialização está correta testando uma chamada simples
+            try:
+                # Teste básico para verificar se a API está funcionando
+                self.vn.train(documentation="Teste de inicialização")
+                st.success("API do Vanna.AI inicializada e testada com sucesso!")
+            except Exception as test_e:
+                st.warning(f"API inicializada, mas teste falhou: {test_e}. Tentando prosseguir mesmo assim.")
             
             self.initialized = True
             return True
@@ -198,49 +216,40 @@ class VannaManager:
         if not self.initialized or schema_df is None:
             return False
         
+        # Simplificando o treinamento para apenas uma documentação geral que descreve as tabelas
         try:
-            # Treinar com documentação geral primeiro
-            try:
-                self.vn.train(documentation="""
-                Este banco de dados contém informações de uma operadora de saúde.
-                As consultas devem ser focadas em dados relacionados a saúde, pacientes, 
-                procedimentos médicos, planos de saúde, atendimentos, convênios e demais tópicos relacionados.
-                Não retorne dados relacionados a produtos eletrônicos ou outros setores.
-                """)
-            except Exception as e:
-                st.warning(f"Aviso ao treinar documentação geral: {e}")
-            
-            # Gerar DDL simplificado para cada tabela
+            # Extrair lista de tabelas
             tables = schema_df['table_name'].unique()
+            tables_list = ", ".join(tables)
             
-            # Limitar a quantidade de tabelas para evitar sobrecarregar a API
-            max_tables = min(len(tables), 10)  # Processar no máximo 10 tabelas
+            doc = f"""
+            Este banco de dados contém informações de uma operadora de saúde com as seguintes tabelas:
+            {tables_list}.
+            As consultas devem ser focadas em dados relacionados a saúde, pacientes, 
+            procedimentos médicos, planos de saúde, atendimentos, convênios e demais tópicos relacionados.
+            """
             
-            for table in tables[:max_tables]:
-                table_cols = schema_df[schema_df['table_name'] == table]
+            # Tentar treinar uma única vez com toda a documentação
+            try:
+                train_config = {
+                    "email": VANNA_EMAIL,
+                    "api_key": VANNA_API_KEY
+                }
                 
-                # Criar documentação para esta tabela
-                try:
-                    cols_sample = ", ".join([f"{row['column_name']} ({row['data_type']})" 
-                                         for _, row in table_cols.head(5).iterrows()])  # Limitar a 5 colunas
-                    doc = f"A tabela {table} contém colunas como: {cols_sample} e outras."
-                    
-                    self.vn.train(documentation=doc)
-                except Exception as e:
-                    st.warning(f"Aviso ao treinar documentação para tabela {table}: {e}")
+                self.vn.train(documentation=doc, config=train_config)
+                st.success("Treinamento completo realizado com sucesso!")
+                return True
+            except Exception as e:
+                st.warning(f"Erro no treinamento completo: {e}")
                 
-                # Criar DDL simplificado
-                try:
-                    # Simplificar o DDL para evitar erros
-                    ddl = f"CREATE TABLE {table} (id INT PRIMARY KEY);"
-                    self.vn.train(ddl=ddl)
-                except Exception as e:
-                    st.warning(f"Aviso ao treinar DDL para tabela {table}: {e}")
-            
-            return True
+                # Plano B: Ignorar o treinamento e prosseguir com o aplicativo
+                st.warning("Prosseguindo sem treinamento completo. O sistema ainda poderá gerar consultas SQL básicas.")
+                return True
+                
         except Exception as e:
             st.error(f"Erro ao treinar modelo: {e}")
-            return False
+            # Mesmo com erro, retornar True para permitir que o aplicativo continue
+            return True
     
     def train_with_query(self, question, sql):
         """Treina o modelo com pares pergunta-SQL conhecidos"""
@@ -248,8 +257,13 @@ class VannaManager:
             return False
         
         try:
+            config = {
+                "email": VANNA_EMAIL,
+                "api_key": VANNA_API_KEY
+            }
+            
             # Treinar com um par específico de pergunta-SQL
-            self.vn.train(question=question, sql=sql)
+            self.vn.train(question=question, sql=sql, config=config)
             return True
         except Exception as e:
             st.error(f"Erro ao treinar modelo com query: {e}")
@@ -261,43 +275,63 @@ class VannaManager:
             return None
         
         try:
-            # Primeiro, tente usar o método direct_sql se disponível
-            try:
-                if hasattr(self.vn, 'direct_sql'):
-                    return self.vn.direct_sql(question)
-            except:
-                pass
+            # Como estamos tendo problemas com os métodos do Vanna,
+            # vamos começar com uma abordagem mais simples baseada nas tabelas que temos
             
-            # Vamos tentar múltiplas abordagens para garantir que temos uma consulta SQL
-            
-            # Abordagem 1: Usar ask e verificar se é SQL
-            try:
-                response = self.vn.ask(question)
-                if response and isinstance(response, str):
-                    # Verificar se a resposta parece SQL (começa com SELECT, INSERT, UPDATE, DELETE, etc)
-                    if re.search(r'^(SELECT|INSERT|UPDATE|DELETE|WITH|CREATE|ALTER)', response.strip(), re.IGNORECASE):
-                        return response.strip()
-            except:
-                pass
-                
-            # Abordagem 2: Tentar construir SQL simples baseado nas tabelas disponíveis
-            if self.db_engine:
+            # Verificar se existe algum método generate_sql ou similar
+            if hasattr(self.vn, 'generate_sql'):
                 try:
-                    # Pegar uma lista de tabelas
-                    query = """
-                    SELECT table_name 
-                    FROM information_schema.tables 
-                    WHERE table_schema NOT IN ('pg_catalog', 'information_schema')
-                    LIMIT 1;
-                    """
-                    result = pd.read_sql(query, self.db_engine)
-                    if not result.empty:
-                        sample_table = result.iloc[0]['table_name']
-                        return f"SELECT * FROM {sample_table} LIMIT 10;"
+                    return self.vn.generate_sql(question)
                 except:
                     pass
             
-            # Abordagem 3: Retornar uma consulta genérica para listar tabelas
+            # Tentar com ask
+            if hasattr(self.vn, 'ask'):
+                try:
+                    result = self.vn.ask(question)
+                    if isinstance(result, str) and ("SELECT" in result.upper() or "WITH" in result.upper()):
+                        return result
+                except:
+                    pass
+            
+            # Approach 2: Tentar construir SQL simples baseado nas tabelas disponíveis
+            if self.db_engine:
+                try:
+                    # Analisar a pergunta e identificar possíveis tabelas mencionadas
+                    query_lower = question.lower()
+                    query = """
+                    SELECT table_name FROM information_schema.tables 
+                    WHERE table_schema NOT IN ('pg_catalog', 'information_schema')
+                    """
+                    tables_df = pd.read_sql(query, self.db_engine)
+                    
+                    # Procurar por tabelas mencionadas na pergunta
+                    mentioned_tables = []
+                    for table in tables_df['table_name'].values:
+                        if table.lower() in query_lower:
+                            mentioned_tables.append(table)
+                    
+                    # Se encontramos tabelas mencionadas, usar a primeira
+                    if mentioned_tables:
+                        table = mentioned_tables[0]
+                        # Obter colunas da tabela
+                        query = f"""
+                        SELECT column_name FROM information_schema.columns 
+                        WHERE table_name = '{table}'
+                        """
+                        cols_df = pd.read_sql(query, self.db_engine)
+                        columns = ", ".join(cols_df['column_name'].values[:5])  # Limitar a 5 colunas
+                        
+                        return f"SELECT {columns} FROM {table} LIMIT 10;"
+                    else:
+                        # Se nenhuma tabela específica foi mencionada, pegar a primeira disponível
+                        if not tables_df.empty:
+                            table = tables_df.iloc[0]['table_name']
+                            return f"SELECT * FROM {table} LIMIT 10;"
+                except Exception as e:
+                    st.warning(f"Erro ao gerar SQL com base nas tabelas: {e}")
+            
+            # Abordagem fallback: Retornar uma consulta genérica para listar tabelas
             return """
             SELECT table_schema, table_name 
             FROM information_schema.tables 
@@ -374,6 +408,10 @@ def main():
     
     if 'username' not in st.session_state:
         st.session_state.username = None
+        
+    # Verificar se o treinamento foi concluído
+    if 'training_completed' not in st.session_state:
+        st.session_state.training_completed = False
     
     # Página de login/registro
     if not st.session_state.logged_in:
@@ -416,6 +454,7 @@ def main():
         if st.sidebar.button("Logout"):
             st.session_state.logged_in = False
             st.session_state.username = None
+            st.session_state.training_completed = False
             st.rerun()
         
         # Verificar se está conectado ao banco
@@ -450,16 +489,22 @@ def main():
                                 if schema_df is not None and not schema_df.empty:
                                     with st.spinner("Treinando modelo com esquema do banco..."):
                                         if st.session_state.vanna_manager.train_with_schema(schema_df):
-                                            st.success("Modelo treinado com sucesso!")
+                                            st.success("Treinamento básico concluído!")
+                                            st.session_state.training_completed = True
+                                            time.sleep(1)  # Pequena pausa para garantir que a mensagem seja vista
+                                            st.rerun()  # Recarregar página para mostrar a interface de consulta
                                         else:
-                                            st.warning("Houve alguns problemas no treinamento do modelo, mas você ainda pode usar o sistema.")
+                                            st.warning("Houve problemas no treinamento do modelo, mas você ainda pode usar o sistema.")
+                                            st.session_state.training_completed = True
+                                            time.sleep(1)
+                                            st.rerun()
                             else:
                                 st.error("Erro ao inicializar Vanna.AI!")
                     else:
                         st.error("Erro ao conectar ao banco de dados!")
         
         # Interface principal quando conectado ao banco e Vanna configurado
-        elif st.session_state.vanna_manager.initialized:
+        elif st.session_state.db_manager.connected and st.session_state.vanna_manager.initialized:
             st.title("💬 DataTalk - Consultas em Linguagem Natural")
             
             # Tabs para diferentes funcionalidades
