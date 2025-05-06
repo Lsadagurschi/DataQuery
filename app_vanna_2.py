@@ -16,6 +16,10 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# Configuração do Vanna.AI como constante no backend
+VANNA_API_KEY = "vn-1ab906ca575147a19e6859f701f51651"
+VANNA_MODEL_NAME = "default"  # Você pode ajustar se necessário
+
 # Classes para gerenciar usuários e autenticação
 class UserManager:
     def __init__(self, user_file='users.json'):
@@ -147,21 +151,17 @@ class DatabaseManager:
 
 # Classe para gerenciar a integração com o Vanna.AI
 class VannaManager:
-    def __init__(self, api_key=None):
-        self.api_key = api_key
-        self.model_name = None
+    def __init__(self):
         self.vn = None
         self.initialized = False
         self.db_engine = None
         
-    def initialize(self, api_key, model_name, db_engine=None):
-        """Inicializa a conexão com a API do Vanna"""
-        self.api_key = api_key
-        self.model_name = model_name
-        self.db_engine = db_engine
-        
+    def initialize(self, db_engine=None):
+        """Inicializa a conexão com a API do Vanna com valores hardcoded"""
         try:
-            self.vn = VannaDefault(model=model_name, api_key=api_key)
+            # Usar os valores constantes definidos no início do código
+            self.vn = VannaDefault(model=VANNA_MODEL_NAME, api_key=VANNA_API_KEY)
+            self.db_engine = db_engine
             
             # Se tiver uma conexão de banco, configurá-la no Vanna
             if db_engine is not None:
@@ -302,7 +302,7 @@ def main():
                 if st.session_state.user_manager.authenticate(login_username, login_password):
                     st.session_state.logged_in = True
                     st.session_state.username = login_username
-                    st.rerun()  # Correção: st.rerun() em vez de st.experimental_rerun()
+                    st.rerun()
                 else:
                     st.error("Nome de usuário ou senha inválidos!")
         
@@ -328,7 +328,7 @@ def main():
         if st.sidebar.button("Logout"):
             st.session_state.logged_in = False
             st.session_state.username = None
-            st.rerun()  # Correção: st.rerun() em vez de st.experimental_rerun()
+            st.rerun()
         
         # Verificar se está conectado ao banco
         if not st.session_state.db_manager.connected:
@@ -352,29 +352,21 @@ def main():
                     if st.session_state.db_manager.connect(host, database, user, password, port):
                         st.success("Conectado ao banco de dados com sucesso!")
                         
-                        # Configurar Vanna.AI após conectar ao banco
-                        st.subheader("Configurar Vanna.AI")
-                        with st.form("vanna_config_form"):
-                            api_key = st.text_input("API Key do Vanna.AI")
-                            model_name = st.text_input("Nome do Modelo Vanna.AI", value="seu-modelo")
-                            
-                            vanna_submit = st.form_submit_button("Configurar Vanna.AI")
-                            
-                            if vanna_submit and api_key and model_name:
-                                with st.spinner("Configurando Vanna.AI..."):
-                                    if st.session_state.vanna_manager.initialize(
-                                        api_key, model_name, st.session_state.db_manager.engine
-                                    ):
-                                        st.success("Vanna.AI inicializado com sucesso!")
-                                        
-                                        # Treinar o modelo com o esquema do banco
-                                        schema_df = st.session_state.db_manager.tables
-                                        if schema_df is not None and not schema_df.empty:
-                                            with st.spinner("Treinando modelo com esquema do banco..."):
-                                                if st.session_state.vanna_manager.train_with_schema(schema_df):
-                                                    st.success("Modelo treinado com sucesso!")
-                                                else:
-                                                    st.error("Erro ao treinar modelo!")
+                        # Configurar Vanna.AI automaticamente após conexão com o banco
+                        with st.spinner("Configurando Vanna.AI automaticamente..."):
+                            if st.session_state.vanna_manager.initialize(st.session_state.db_manager.engine):
+                                st.success("Vanna.AI inicializado com sucesso!")
+                                
+                                # Treinar o modelo com o esquema do banco
+                                schema_df = st.session_state.db_manager.tables
+                                if schema_df is not None and not schema_df.empty:
+                                    with st.spinner("Treinando modelo com esquema do banco..."):
+                                        if st.session_state.vanna_manager.train_with_schema(schema_df):
+                                            st.success("Modelo treinado com sucesso!")
+                                        else:
+                                            st.error("Erro ao treinar modelo!")
+                            else:
+                                st.error("Erro ao inicializar Vanna.AI!")
                     else:
                         st.error("Erro ao conectar ao banco de dados!")
         
