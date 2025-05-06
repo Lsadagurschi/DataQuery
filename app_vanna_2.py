@@ -152,14 +152,21 @@ class VannaManager:
         self.model_name = None
         self.vn = None
         self.initialized = False
+        self.db_engine = None
         
-    def initialize(self, api_key, model_name):
+    def initialize(self, api_key, model_name, db_engine=None):
         """Inicializa a conexão com a API do Vanna"""
         self.api_key = api_key
         self.model_name = model_name
+        self.db_engine = db_engine
         
         try:
             self.vn = VannaDefault(model=model_name, api_key=api_key)
+            
+            # Se tiver uma conexão de banco, configurá-la no Vanna
+            if db_engine is not None:
+                self.vn.connect_to_postgres_with_engine(db_engine)
+                
             self.initialized = True
             return True
         except Exception as e:
@@ -186,7 +193,7 @@ class VannaManager:
                     if row['is_nullable'] == 'NO':
                         col_def += " NOT NULL"
                     
-                    if row['column_default'] is not None:
+                    if pd.notna(row['column_default']):
                         col_def += f" DEFAULT {row['column_default']}"
                     
                     if i < len(table_cols) - 1:
@@ -203,7 +210,8 @@ class VannaManager:
             self.vn.train(documentation="""
             Este banco de dados contém informações de uma operadora de saúde.
             As consultas devem ser focadas em dados relacionados a saúde, pacientes, 
-            procedimentos médicos, planos de saúde e demais tópicos relacionados.
+            procedimentos médicos, planos de saúde, atendimentos, convênios e demais tópicos relacionados.
+            Não retorne dados relacionados a produtos eletrônicos ou outros setores.
             """)
             
             return True
@@ -238,7 +246,7 @@ class VannaManager:
     def execute_and_visualize(self, question):
         """Executa a consulta e gera visualização se possível"""
         if not self.initialized:
-            return None, None
+            return None, None, None
             
         try:
             # Gerar SQL
@@ -249,7 +257,10 @@ class VannaManager:
                 df = self.vn.run_sql(sql)
                 
                 # Tentar gerar visualização
-                fig = self.vn.get_plotly_figure(question=question, sql=sql, df=df)
+                try:
+                    fig = self.vn.get_plotly_figure(question=question, sql=sql, df=df)
+                except:
+                    fig = None
                 
                 return sql, df, fig
             return None, None, None
@@ -291,7 +302,7 @@ def main():
                 if st.session_state.user_manager.authenticate(login_username, login_password):
                     st.session_state.logged_in = True
                     st.session_state.username = login_username
-                    st.experimental_rerun()
+                    st.rerun()  # Correção: st.rerun() em vez de st.experimental_rerun()
                 else:
                     st.error("Nome de usuário ou senha inválidos!")
         
@@ -317,7 +328,7 @@ def main():
         if st.sidebar.button("Logout"):
             st.session_state.logged_in = False
             st.session_state.username = None
-            st.experimental_rerun()
+            st.rerun()  # Correção: st.rerun() em vez de st.experimental_rerun()
         
         # Verificar se está conectado ao banco
         if not st.session_state.db_manager.connected:
@@ -342,22 +353,28 @@ def main():
                         st.success("Conectado ao banco de dados com sucesso!")
                         
                         # Configurar Vanna.AI após conectar ao banco
-                        with st.spinner("Configurando Vanna.AI..."):
+                        st.subheader("Configurar Vanna.AI")
+                        with st.form("vanna_config_form"):
                             api_key = st.text_input("API Key do Vanna.AI")
                             model_name = st.text_input("Nome do Modelo Vanna.AI", value="seu-modelo")
                             
-                            if api_key and model_name:
-                                if st.session_state.vanna_manager.initialize(api_key, model_name):
-                                    st.success("Vanna.AI inicializado com sucesso!")
-                                    
-                                    # Treinar o modelo com o esquema do banco
-                                    schema_df = st.session_state.db_manager.tables
-                                    if schema_df is not None and not schema_df.empty:
-                                        with st.spinner("Treinando modelo com esquema do banco..."):
-                                            if st.session_state.vanna_manager.train_with_schema(schema_df):
-                                                st.success("Modelo treinado com sucesso!")
-                                            else:
-                                                st.error("Erro ao treinar modelo!")
+                            vanna_submit = st.form_submit_button("Configurar Vanna.AI")
+                            
+                            if vanna_submit and api_key and model_name:
+                                with st.spinner("Configurando Vanna.AI..."):
+                                    if st.session_state.vanna_manager.initialize(
+                                        api_key, model_name, st.session_state.db_manager.engine
+                                    ):
+                                        st.success("Vanna.AI inicializado com sucesso!")
+                                        
+                                        # Treinar o modelo com o esquema do banco
+                                        schema_df = st.session_state.db_manager.tables
+                                        if schema_df is not None and not schema_df.empty:
+                                            with st.spinner("Treinando modelo com esquema do banco..."):
+                                                if st.session_state.vanna_manager.train_with_schema(schema_df):
+                                                    st.success("Modelo treinado com sucesso!")
+                                                else:
+                                                    st.error("Erro ao treinar modelo!")
                     else:
                         st.error("Erro ao conectar ao banco de dados!")
         
@@ -380,6 +397,7 @@ def main():
                             sql, df, fig = st.session_state.vanna_manager.execute_and_visualize(query)
                             
                             if sql and df is not None:
+                                st.subheader("Consulta SQL Gerada:")
                                 st.code(sql, language="sql")
                                 
                                 # Adicionar à histórico
@@ -388,27 +406,39 @@ def main():
                                 )
                                 
                                 # Mostrar resultados
+                                st.subheader("Resultados:")
                                 st.dataframe(df)
                                 
                                 # Mostrar visualização se disponível
                                 if fig is not None:
+                                    st.subheader("Visualização:")
                                     st.plotly_chart(fig)
                                 
                                 # Opção para favoritar
-                                fav_name = st.text_input("Nome para favoritar esta consulta (opcional):")
-                                if fav_name and st.button("Favoritar"):
-                                    st.session_state.user_manager.add_favorite(
-                                        st.session_state.username, fav_name, query, sql
-                                    )
-                                    st.success(f"Consulta '{fav_name}' adicionada aos favoritos!")
+                                col1, col2 = st.columns(2)
+                                with col1:
+                                    fav_name = st.text_input("Nome para favoritar esta consulta (opcional):")
+                                with col2:
+                                    if fav_name and st.button("Favoritar"):
+                                        st.session_state.user_manager.add_favorite(
+                                            st.session_state.username, fav_name, query, sql
+                                        )
+                                        st.success(f"Consulta '{fav_name}' adicionada aos favoritos!")
                                 
                                 # Opção de feedback para melhorar o modelo
                                 st.subheader("Feedback")
-                                if st.button("Esta consulta está correta"):
-                                    st.session_state.vanna_manager.train_with_query(query, sql)
-                                    st.success("Obrigado pelo feedback! O modelo foi atualizado.")
+                                feedback_col1, feedback_col2 = st.columns(2)
+                                with feedback_col1:
+                                    if st.button("👍 Esta consulta está correta"):
+                                        st.session_state.vanna_manager.train_with_query(query, sql)
+                                        st.success("Obrigado pelo feedback! O modelo foi atualizado.")
+                                
+                                with feedback_col2:
+                                    if st.button("👎 Esta consulta está incorreta"):
+                                        st.warning("Por favor, forneça a versão correta da consulta abaixo.")
                                 
                                 correct_sql = st.text_area("Se a consulta estiver incorreta, você pode inserir a versão correta aqui:")
+                                
                                 if correct_sql and st.button("Enviar SQL correto"):
                                     st.session_state.vanna_manager.train_with_query(query, correct_sql)
                                     st.success("Obrigado pelo feedback! O modelo foi atualizado com sua versão correta.")
@@ -443,7 +473,7 @@ def main():
                     history.reverse()  # Mostrar as consultas mais recentes primeiro
                     
                     for i, item in enumerate(history):
-                        with st.expander(f"{item['timestamp']} - {item['query'][:50]}..."):
+                        with st.expander(f"{item['timestamp']} - {item['query'][:50]}..." if len(item['query']) > 50 else f"{item['timestamp']} - {item['query']}"):
                             st.markdown(f"**Pergunta:** {item['query']}")
                             st.code(item['sql'], language="sql")
                             
@@ -459,9 +489,17 @@ def main():
                 st.subheader("🗄️ Esquema do Banco de Dados")
                 
                 if st.session_state.db_manager.tables is not None and not st.session_state.db_manager.tables.empty:
-                    st.dataframe(st.session_state.db_manager.tables)
+                    # Agrupar por tabela para facilitar a visualização
+                    tables = st.session_state.db_manager.tables['table_name'].unique()
                     
-                    # Opção para baixar o esquema
+                    for table in tables:
+                        with st.expander(f"Tabela: {table}"):
+                            table_schema = st.session_state.db_manager.tables[
+                                st.session_state.db_manager.tables['table_name'] == table
+                            ]
+                            st.dataframe(table_schema)
+                    
+                    # Opção para baixar o esquema completo
                     csv = st.session_state.db_manager.tables.to_csv(index=False)
                     st.download_button(
                         label="Download do Esquema em CSV",
