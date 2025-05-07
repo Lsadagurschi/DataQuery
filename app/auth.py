@@ -1,9 +1,15 @@
 import streamlit as st
-import hashlib
-import json
+import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
 import os
-from datetime import datetime
+import yaml
+from PIL import Image
+import base64
 
+# Importação dos módulos do sistema
+from auth import authenticate_user, create_user, is_authenticated
+from database import connect_database, execute_query, test_connection
 # Em uma implementação real, você usaria um banco de dados adequado
 # Este é apenas um exemplo para fins de demonstração
 
