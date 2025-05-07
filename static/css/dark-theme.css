@@ -1,0 +1,61 @@
+/* dark-theme.css - Tema escuro para o NeoQuery AI */
+
+body.dark-theme {
+  --primary-color: #4dabf7;
+  --primary-dark: #339af0;
+  --secondary-color: #51cf66;
+  --secondary-dark: #40c057;
+  --accent-color: #fcc419;
+  --text-color: #f8f9fa;
+  --light-text: #ced4da;
+  --background-color: #212529;
+  --card-background: #343a40;
+  --border-color: #495057;
+}
+
+.dark-theme .stApp {
+  background-color: var(--background-color);
+}
+
+.dark-theme .card {
+  background-color: var(--card-background);
+}
+
+.dark-theme .stTextArea textarea {
+  background-color: #2b3035;
+  color: var(--text-color);
+  border-color: var(--border-color);
+}
+
+.dark-theme .sql-code {
+  background-color: #2d3436;
+  color: #dfe6e9;
+}
+
+.dark-theme .styled-table thead tr {
+  background-color: var(--primary-dark);
+}
+
+.dark-theme .styled-table tbody tr:nth-of-type(even) {
+  background-color: #3b4147;
+}
+
+.dark-theme .styled-table tbody tr {
+  border-bottom: 1px solid var(--border-color);
+}
+
+.dark-theme .message-success {
+  background-color: rgba(64, 192, 87, 0.2);
+}
+
+.dark-theme .message-error {
+  background-color: rgba(250, 82, 82, 0.2);
+}
+
+.dark-theme .message-info {
+  background-color: rgba(51, 154, 240, 0.2);
+}
+
+.dark-theme .message-warning {
+  background-color: rgba(252, 196, 25, 0.2);
+}
