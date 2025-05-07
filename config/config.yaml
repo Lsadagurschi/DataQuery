@@ -1,0 +1,98 @@
+# config.yaml - Arquivo de configuração do NeoQuery AI
+
+# Configurações da aplicação
+app:
+  name: "NeoQuery AI"
+  version: "1.0.0"
+  description: "Plataforma SAAS para consultas em banco de dados usando linguagem natural"
+  debug: false
+
+# Configurações de conexão com banco de dados
+database:
+  default_timeout: 30  # segundos
+  max_rows_return: 10000
+  supported_types:
+    - "PostgreSQL"
+    - "MySQL"
+    - "SQL Server"
+    - "Oracle"
+
+# Configurações do motor NLP
+nlp_engine:
+  model: "gpt-4-turbo"  # Modelo usado para processamento de linguagem natural
+  temperature: 0.2  # Determinismo do modelo (0-1)
+  max_tokens: 500  # Limite de tokens para respostas
+  gold_list_size: 100  # Número máximo de consultas na Gold List
+
+# Configurações das visualizações
+visualizations:
+  default_height: 500  # pixels
+  default_width: 800  # pixels
+  max_datapoints: 5000  # limite de pontos de dados para visualização
+  default_theme: "light"
+  color_schemes:
+    - "default"
+    - "colorblind_friendly"
+    - "corporate"
+    - "pastel"
+
+# Configurações de segurança
+security:
+  password_min_length: 8
+  require_special_chars: true
+  session_timeout: 120  # minutos
+  max_login_attempts: 5
+  lockout_duration: 15  # minutos
+
+# Limites por plano
+plans:
+  basic:
+    name: "Básico"
+    price_monthly: 199
+    price_yearly: 1990
+    max_users: 3
+    max_queries_per_month: 100
+    max_connections: 1
+    features:
+      - "Consultas em linguagem natural"
+      - "Visualizações básicas"
+      - "Exportação CSV"
+      - "Suporte por e-mail"
+  
+  professional:
+    name: "Profissional"
+    price_monthly: 499
+    price_yearly: 4990
+    max_users: 10
+    max_queries_per_month: 500
+    max_connections: 3
+    features:
+      - "Todas as funcionalidades do plano Básico"
+      - "Visualizações avançadas"
+      - "Exportação em múltiplos formatos"
+      - "Histórico de consultas estendido"
+      - "Suporte prioritário"
+
+  enterprise:
+    name: "Empresarial"
+    price_monthly: 999
+    price_yearly: 9990
+    max_users: -1  # ilimitado
+    max_queries_per_month: -1  # ilimitado
+    max_connections: -1  # ilimitado
+    features:
+      - "Todas as funcionalidades do plano Profissional"
+      - "Usuários ilimitados"
+      - "Consultas ilimitadas"
+      - "Conexões ilimitadas"
+      - "API avançada"
+      - "Treinamento personalizado"
+      - "Suporte 24/7"
+
+# Configurações de e-mail e notificações
+notifications:
+  smtp_server: "smtp.neoquery.ai"
+  smtp_port: 587
+  sender_email: "noreply@neoquery.ai"
+  welcome_subject: "Bem-vindo ao NeoQuery AI"
+  support_email: "suporte@neoquery.ai"
