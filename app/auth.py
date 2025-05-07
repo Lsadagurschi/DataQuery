@@ -1,18 +1,10 @@
 import streamlit as st
-import pandas as pd
-import plotly.express as px
-import plotly.graph_objects as go
+import hashlib
+import json
 import os
-import yaml
-from PIL import Image
-import base64
+from datetime import datetime, timedelta
 
-# Importação dos módulos do sistema
-from auth import authenticate_user, create_user, is_authenticated
-from database import connect_database, execute_query, test_connection
-# Em uma implementação real, você usaria um banco de dados adequado
-# Este é apenas um exemplo para fins de demonstração
-
+# Constante para armazenar usuários
 USER_DB_FILE = "users.json"
 
 def _get_users():
@@ -82,7 +74,8 @@ def get_user_details(email):
     user_data.pop("password", None)
     
     return user_data
-  def update_user(email, details):
+
+def update_user(email, details):
     """Atualiza detalhes do usuário"""
     users = _get_users()
     
