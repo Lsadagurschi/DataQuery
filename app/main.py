@@ -4,8 +4,9 @@ import plotly.express as px
 import plotly.graph_objects as go
 import os
 import yaml
-from PIL import Image
 import base64
+# Comentado para evitar erro se não existir
+# from PIL import Image 
 
 # Importação dos módulos do sistema
 from auth import authenticate_user, create_user, is_authenticated
@@ -24,17 +25,33 @@ st.set_page_config(
 
 # Carregamento do CSS personalizado
 def load_css():
-    with open('static/css/style.css') as f:
-        st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
+    try:
+        if os.path.exists('static/css/style.css'):
+            with open('static/css/style.css') as f:
+                st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
+        elif os.path.exists('../static/css/style.css'):
+            with open('../static/css/style.css') as f:
+                st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
+    except Exception as e:
+        # Se não conseguir carregar o CSS, ignora silenciosamente
+        pass
 
-load_css()
+try:
+    load_css()
+except:
+    pass
 
 # Função para exibir o logo
 def display_logo():
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        # st.image('static/images/logo.png', width=300)
-        st.title("NeoQuery AI")  # Usar texto em vez de imagem
+        # Substituir por um título estilizado em vez de tentar carregar a imagem
+        st.markdown("""
+        <div style="text-align: center; padding: 10px; margin-bottom: 20px;">
+            <h1 style="color: #3498db; font-size: 2.5em;">NeoQuery AI</h1>
+            <p style="font-style: italic;">Consultas SQL em linguagem natural</p>
+        </div>
+        """, unsafe_allow_html=True)
 
 # Função principal para a página inicial
 def main_page():
@@ -58,7 +75,26 @@ def main_page():
         """)
     
     with col2:
-        st.video('static/videos/demo.mp4')
+        # Substituir o vídeo por uma descrição ou imagem de placeholder
+        st.markdown("""
+        <div style="background-color: #f8f9fa; padding: 20px; border-radius: 5px; text-align: center;">
+            <h3 style="color: #2c3e50;">Demonstração em Vídeo</h3>
+            <p>Assista à demonstração para ver como transformar perguntas simples em consultas SQL poderosas.</p>
+            <p style="color: #7f8c8d; font-size: 0.9em;">Vídeo indisponível no momento. Será adicionado em breve.</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Explicação em texto do que seria mostrado no vídeo
+        with st.expander("Ver descrição da demonstração"):
+            st.markdown("""
+            **Na demonstração em vídeo, você veria:**
+            
+            1. Um usuário conectando seu banco de dados PostgreSQL
+            2. Digitando a pergunta "Quais foram os 5 clientes que mais compraram no último trimestre?"
+            3. O sistema convertendo isso em SQL complexo com joins e agregações
+            4. Exibindo resultados em uma tabela e gráfico de barras
+            5. Salvando a consulta para uso futuro
+            """)
     
     st.markdown("---")
     
