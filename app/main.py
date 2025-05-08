@@ -33,7 +33,7 @@ load_css()
 def display_logo():
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        st.image('static/images/logo.png', width=300)
+        # st.image('static/images/logo.png', width=300)
 
 # Função principal para a página inicial
 def main_page():
