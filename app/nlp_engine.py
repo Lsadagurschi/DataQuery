@@ -122,54 +122,35 @@ def natural_to_sql(query, db_info):
     """
     
     try:
-        # Verificar se há chave API nos secrets do Streamlit
+        # Obter a chave API dos secrets do Streamlit
         api_key = None
         
         try:
-            # Tenta acessar a chave da API nos secrets do Streamlit
             if "openai" in st.secrets and "api_key" in st.secrets["openai"]:
                 api_key = st.secrets["openai"]["api_key"]
             elif "OPENAI_API_KEY" in st.secrets:
                 api_key = st.secrets["OPENAI_API_KEY"]
         except:
-            # Se não conseguir acessar os secrets
             pass
-            
-        # Se não encontrou a chave no secrets, tenta uma versão simulada
+        
         if not api_key:
-            # Modo de simulação - retorna SQL de exemplo baseado em palavras-chave
-            st.warning("Chave API OpenAI não encontrada. Usando modo de simulação.")
+            raise ValueError("Chave API OpenAI não encontrada nos secrets do Streamlit. " 
+                            "Por favor, configure a chave API em .streamlit/secrets.toml ou nas configurações do Streamlit Cloud.")
             
-            # Exemplos de consultas simuladas
-            keywords_mapping = {
-                "venda": "SELECT v.data, p.nome, SUM(v.valor) as total_vendas\nFROM vendas v\nJOIN produtos p ON v.produto_id = p.id\nGROUP BY v.data, p.nome\nORDER BY v.data DESC;",
-                "produto": "SELECT p.nome, p.categoria, p.preco, SUM(v.quantidade) as total_vendido\nFROM produtos p\nLEFT JOIN vendas v ON p.id = v.produto_id\nGROUP BY p.nome, p.categoria, p.preco\nORDER BY total_vendido DESC;",
-                "cliente": "SELECT c.nome, c.regiao, COUNT(v.id) as num_compras, SUM(v.valor) as total_gasto\nFROM clientes c\nLEFT JOIN vendas v ON c.id = v.cliente_id\nGROUP BY c.nome, c.regiao\nORDER BY total_gasto DESC;",
-                "região": "SELECT c.regiao, COUNT(DISTINCT c.id) as num_clientes, SUM(v.valor) as total_vendas\nFROM clientes c\nLEFT JOIN vendas v ON c.id = v.cliente_id\nGROUP BY c.regiao\nORDER BY total_vendas DESC;",
-                "mês": "SELECT EXTRACT(MONTH FROM v.data) as mes, EXTRACT(YEAR FROM v.data) as ano, SUM(v.valor) as total_vendas\nFROM vendas v\nGROUP BY mes, ano\nORDER BY ano DESC, mes DESC;"
-            }
-            
-            # Busca por palavras-chave na consulta
-            for keyword, sql in keywords_mapping.items():
-                if keyword.lower() in query.lower():
-                    return sql
-            
-            # Resposta padrão se nenhuma palavra-chave for encontrada
-            return "SELECT * FROM vendas ORDER BY data DESC LIMIT 10;"
-            
-        # Modo real com API OpenAI
+        # Inicializar o cliente OpenAI
         client = openai.OpenAI(api_key=api_key)
         
+        # Fazer a chamada da API
         response = client.chat.completions.create(
-            model="gpt-4-turbo",
+            model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": "Você é um assistente especializado em gerar SQL preciso."},
                 {"role": "user", "content": prompt}
             ],
-            temperature=0.2  # Para resultados mais determinísticos
+            temperature=0.2
         )
         
-        # A forma de acessar o conteúdo da resposta mudou na nova API
+        # Processar a resposta
         sql = response.choices[0].message.content.strip()
         
         # Limpar e formatar o SQL
@@ -180,9 +161,7 @@ def natural_to_sql(query, db_info):
     
     except Exception as e:
         st.error(f"Erro ao gerar SQL: {str(e)}")
-        # Modo de fallback para quando ocorrer um erro
-        st.warning("Usando SQL de exemplo devido a um erro na geração.")
-        return "SELECT v.data, p.nome, SUM(v.valor) as total_vendas\nFROM vendas v\nJOIN produtos p ON v.produto_id = p.id\nGROUP BY v.data, p.nome\nORDER BY v.data DESC LIMIT 10;"
+        raise e
 
 def validate_query(sql, db_info):
     """Verifica se a consulta SQL é segura e válida"""
