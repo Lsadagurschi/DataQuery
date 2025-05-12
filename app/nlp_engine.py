@@ -12,8 +12,10 @@ from datetime import datetime
 GOLD_LIST_FILE = "gold_list.json"
 FEEDBACK_FILE = "feedback_log.json"
 
-# Suponha que você configurou sua API key adequadamente
+# Configure sua API key adequadamente
 # openai.api_key = os.environ.get("OPENAI_API_KEY")
+# Ou defina diretamente (não recomendado para produção)
+ openai.api_key = "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"
 
 def _get_gold_list():
     """Carrega a lista de consultas exemplares"""
@@ -125,9 +127,10 @@ def natural_to_sql(query, db_info):
     """
     
     try:
-        # Em uma implementação real, você usaria o modelo GPT-4 ou similar
-        # Aqui é apenas um exemplo
-        response = openai.ChatCompletion.create(
+        # CÓDIGO ATUALIZADO para API OpenAI v1.0.0+
+        client = openai.OpenAI()
+        
+        response = client.chat.completions.create(
             model="gpt-4-turbo",
             messages=[
                 {"role": "system", "content": "Você é um assistente especializado em gerar SQL preciso."},
@@ -136,6 +139,7 @@ def natural_to_sql(query, db_info):
             temperature=0.2  # Para resultados mais determinísticos
         )
         
+        # A forma de acessar o conteúdo da resposta mudou na nova API
         sql = response.choices[0].message.content.strip()
         
         # Limpar e formatar o SQL
