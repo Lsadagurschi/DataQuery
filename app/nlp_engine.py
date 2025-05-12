@@ -12,11 +12,6 @@ from datetime import datetime
 GOLD_LIST_FILE = "gold_list.json"
 FEEDBACK_FILE = "feedback_log.json"
 
-# Configure sua API key adequadamente
-openai.api_key = os.environ.get("OPENAI_API_KEY")
-# Ou defina diretamente (não recomendado para produção)
-openai.api_key = "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"
-
 def _get_gold_list():
     """Carrega a lista de consultas exemplares"""
     if not os.path.exists(GOLD_LIST_FILE):
@@ -127,8 +122,43 @@ def natural_to_sql(query, db_info):
     """
     
     try:
-        # CÓDIGO ATUALIZADO para API OpenAI v1.0.0+
-        client = openai.OpenAI()
+        # Verificar se há chave API nos secrets do Streamlit
+        api_key = None
+        
+        try:
+            # Tenta acessar a chave da API nos secrets do Streamlit
+            if "openai" in st.secrets and "api_key" in st.secrets["openai"]:
+                api_key = st.secrets["openai"]["api_key"]
+            elif "OPENAI_API_KEY" in st.secrets:
+                api_key = st.secrets["OPENAI_API_KEY"]
+        except:
+            # Se não conseguir acessar os secrets
+            pass
+            
+        # Se não encontrou a chave no secrets, tenta uma versão simulada
+        if not api_key:
+            # Modo de simulação - retorna SQL de exemplo baseado em palavras-chave
+            st.warning("Chave API OpenAI não encontrada. Usando modo de simulação.")
+            
+            # Exemplos de consultas simuladas
+            keywords_mapping = {
+                "venda": "SELECT v.data, p.nome, SUM(v.valor) as total_vendas\nFROM vendas v\nJOIN produtos p ON v.produto_id = p.id\nGROUP BY v.data, p.nome\nORDER BY v.data DESC;",
+                "produto": "SELECT p.nome, p.categoria, p.preco, SUM(v.quantidade) as total_vendido\nFROM produtos p\nLEFT JOIN vendas v ON p.id = v.produto_id\nGROUP BY p.nome, p.categoria, p.preco\nORDER BY total_vendido DESC;",
+                "cliente": "SELECT c.nome, c.regiao, COUNT(v.id) as num_compras, SUM(v.valor) as total_gasto\nFROM clientes c\nLEFT JOIN vendas v ON c.id = v.cliente_id\nGROUP BY c.nome, c.regiao\nORDER BY total_gasto DESC;",
+                "região": "SELECT c.regiao, COUNT(DISTINCT c.id) as num_clientes, SUM(v.valor) as total_vendas\nFROM clientes c\nLEFT JOIN vendas v ON c.id = v.cliente_id\nGROUP BY c.regiao\nORDER BY total_vendas DESC;",
+                "mês": "SELECT EXTRACT(MONTH FROM v.data) as mes, EXTRACT(YEAR FROM v.data) as ano, SUM(v.valor) as total_vendas\nFROM vendas v\nGROUP BY mes, ano\nORDER BY ano DESC, mes DESC;"
+            }
+            
+            # Busca por palavras-chave na consulta
+            for keyword, sql in keywords_mapping.items():
+                if keyword.lower() in query.lower():
+                    return sql
+            
+            # Resposta padrão se nenhuma palavra-chave for encontrada
+            return "SELECT * FROM vendas ORDER BY data DESC LIMIT 10;"
+            
+        # Modo real com API OpenAI
+        client = openai.OpenAI(api_key=api_key)
         
         response = client.chat.completions.create(
             model="gpt-4-turbo",
@@ -150,8 +180,9 @@ def natural_to_sql(query, db_info):
     
     except Exception as e:
         st.error(f"Erro ao gerar SQL: {str(e)}")
-        # Retorna uma consulta de exemplo para demonstração
-        return "SELECT v.data, p.nome, SUM(v.valor) as total_vendas\nFROM vendas v\nJOIN produtos p ON v.produto_id = p.id\nGROUP BY v.data, p.nome\nORDER BY v.data DESC;"
+        # Modo de fallback para quando ocorrer um erro
+        st.warning("Usando SQL de exemplo devido a um erro na geração.")
+        return "SELECT v.data, p.nome, SUM(v.valor) as total_vendas\nFROM vendas v\nJOIN produtos p ON v.produto_id = p.id\nGROUP BY v.data, p.nome\nORDER BY v.data DESC LIMIT 10;"
 
 def validate_query(sql, db_info):
     """Verifica se a consulta SQL é segura e válida"""
