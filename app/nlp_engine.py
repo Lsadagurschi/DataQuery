@@ -13,9 +13,9 @@ GOLD_LIST_FILE = "gold_list.json"
 FEEDBACK_FILE = "feedback_log.json"
 
 # Configure sua API key adequadamente
-# openai.api_key = os.environ.get("OPENAI_API_KEY")
+openai.api_key = os.environ.get("OPENAI_API_KEY")
 # Ou defina diretamente (não recomendado para produção)
- openai.api_key = "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"
+openai.api_key = "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"
 
 def _get_gold_list():
     """Carrega a lista de consultas exemplares"""
