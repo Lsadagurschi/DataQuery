@@ -7,6 +7,11 @@ import sqlparse
 import openai
 import time
 from datetime import datetime
+# Importações adicionadas para depuração
+import sys
+import traceback
+import httpx
+import inspect
 
 # Constantes para gerenciar o aprendizado
 GOLD_LIST_FILE = "gold_list.json"
@@ -16,7 +21,6 @@ def _get_gold_list():
     """Carrega a lista de consultas exemplares"""
     if not os.path.exists(GOLD_LIST_FILE):
         return []
-    
     try:
         with open(GOLD_LIST_FILE, 'r') as f:
             return json.load(f)
@@ -31,14 +35,13 @@ def _save_gold_list(gold_list):
 def _log_feedback(query, sql, feedback, details=None):
     """Registra feedback sobre consultas"""
     feedback_data = []
-    
     if os.path.exists(FEEDBACK_FILE):
         try:
             with open(FEEDBACK_FILE, 'r') as f:
                 feedback_data = json.load(f)
         except:
             feedback_data = []
-    
+
     feedback_data.append({
         "timestamp": datetime.now().isoformat(),
         "query": query,
@@ -46,17 +49,15 @@ def _log_feedback(query, sql, feedback, details=None):
         "feedback": feedback,
         "details": details
     })
-    
     with open(FEEDBACK_FILE, 'w') as f:
         json.dump(feedback_data, f, indent=2)
 
 def natural_to_sql(query, db_info):
     """Converte uma consulta em linguagem natural para SQL usando um modelo de NLP"""
-    
     # Obter informações do schema do banco de dados
     from database import get_schema_info
     schema = get_schema_info(db_info)
-    
+
     # Se não conseguiu obter o schema, use um exemplo
     if not schema:
         schema = {
@@ -96,35 +97,27 @@ def natural_to_sql(query, db_info):
                 {"table": "vendas", "column": "cliente_id", "foreign_table": "clientes", "foreign_column": "id"}
             ]
         }
-    
+
     # Exemplos de consultas bem-sucedidas (Gold List)
     gold_examples = _get_gold_list()
     examples_text = ""
-    
     if gold_examples:
         examples_text = "Exemplos de consultas bem-sucedidas:\n\n"
-        
-        for example in gold_examples[:3]:  # Use apenas os 3 primeiros exemplos
+        for example in gold_examples[:3]: # Use apenas os 3 primeiros exemplos
             examples_text += f"Query: {example['query']}\nSQL: {example['sql']}\n\n"
-    
+
     # Criar o prompt para o modelo
-    prompt = f"""
-    Você é um especialista em converter perguntas em linguagem natural para SQL.
-    
-    Schema do banco de dados:
-    {json.dumps(schema, indent=2)}
-    
-    {examples_text}
-    
-    Pergunta do usuário: {query}
-    
-    Gere apenas o código SQL que responde à pergunta. Não inclua explicações.
-    """
-    
+    prompt = f"""Você é um especialista em converter perguntas em linguagem natural para SQL.
+Schema do banco de dados:
+{json.dumps(schema, indent=2)}
+
+{examples_text}
+Pergunta do usuário: {query}
+Gere apenas o código SQL que responde à pergunta. Não inclua explicações.
+"""
     try:
         # Obter a chave API dos secrets do Streamlit
         api_key = None
-        
         try:
             if "openai" in st.secrets and "api_key" in st.secrets["openai"]:
                 api_key = st.secrets["openai"]["api_key"]
@@ -132,14 +125,43 @@ def natural_to_sql(query, db_info):
                 api_key = st.secrets["OPENAI_API_KEY"]
         except:
             pass
-        
+
         if not api_key:
-            raise ValueError("Chave API OpenAI não encontrada nos secrets do Streamlit. " 
-                            "Por favor, configure a chave API em .streamlit/secrets.toml ou nas configurações do Streamlit Cloud.")
-            
-        # Inicializar o cliente OpenAI
-        client = openai.OpenAI(api_key=api_key)
-        
+            raise ValueError("Chave API OpenAI não encontrada nos secrets do Streamlit. "
+                             "Por favor, configure a chave API em .streamlit/secrets.toml ou nas configurações do Streamlit Cloud.")
+
+        # Bloco de depuração INSERIDO AQUI
+        st.subheader("Informações de Depuração da Inicialização OpenAI e HTTPX")
+        st.write(f"Versão do Python: {sys.version}")
+
+        st.write("--- OpenAI Info ---")
+        st.write(f"Caminho da biblioteca OpenAI: {openai.__file__}")
+        st.write(f"Versão da biblioteca OpenAI: {openai.__version__}")
+
+        st.write("--- HTTPX Info ---")
+        st.write(f"Caminho da biblioteca httpx: {httpx.__file__}")
+        st.write(f"Versão da biblioteca httpx: {httpx.__version__}")
+        try:
+            # Tenta obter e mostrar a assinatura do construtor do httpx.Client
+            sig_httpx_client_init = str(inspect.signature(httpx.Client.__init__))
+            st.write(f"Assinatura de httpx.Client.__init__: {sig_httpx_client_init}")
+        except Exception as e_inspect:
+            st.write(f"Não foi possível obter a assinatura de httpx.Client.__init__: {str(e_inspect)}")
+
+        api_key_para_mostrar = "Chave API não encontrada ou inválida"
+        if 'api_key' in locals() and api_key and isinstance(api_key, str) and len(api_key) > 10:
+            api_key_para_mostrar = f"{api_key[:5]}...{api_key[-5:]}"
+        elif 'api_key' in locals() and api_key:
+            api_key_para_mostrar = f"Chave API é curta ou não é uma string (Tipo: {type(api_key)})"
+
+        st.write(f"Tipo da variável api_key: {type(api_key) if 'api_key' in locals() else 'api_key não definida'}")
+        st.write(f"Valor da api_key (sanitizado): {api_key_para_mostrar}")
+
+        st.write("Tentando inicializar o cliente OpenAI (que usará httpx internamente)...")
+        # FIM DO BLOCO DE DEBUG
+
+        client = openai.OpenAI(api_key=api_key) # LINHA ORIGINAL
+
         # Fazer a chamada da API
         response = client.chat.completions.create(
             model="gpt-3.5-turbo",
@@ -149,29 +171,27 @@ def natural_to_sql(query, db_info):
             ],
             temperature=0.2
         )
-        
+
         # Processar a resposta
         sql = response.choices[0].message.content.strip()
-        
         # Limpar e formatar o SQL
         sql = sql.replace("```sql", "").replace("```", "").strip()
         sql = sqlparse.format(sql, reindent=True, keyword_case='upper')
-        
         return sql
-    
+
     except Exception as e:
+        # Adicionar mais detalhes ao erro, se possível
         st.error(f"Erro ao gerar SQL: {str(e)}")
+        st.error(f"Traceback completo: {traceback.format_exc()}") # Adiciona o traceback completo à saída do Streamlit
         raise e
 
 def validate_query(sql, db_info):
     """Verifica se a consulta SQL é segura e válida"""
-    
     # Verificar se é uma consulta de leitura (e não modificação)
     sql_lower = sql.lower()
-    
     if re.search(r'\b(insert|update|delete|drop|alter|create|truncate)\b', sql_lower):
         return False, "Consultas de modificação não são permitidas"
-    
+
     # Verificar sintaxe SQL (isso é muito simplificado)
     try:
         parsed = sqlparse.parse(sql)
@@ -179,41 +199,35 @@ def validate_query(sql, db_info):
             return False, "Consulta SQL inválida"
     except:
         return False, "Erro ao analisar a consulta SQL"
-    
+
     # Em uma implementação real, você faria validações mais rigorosas,
     # como verificar se as tabelas e colunas existem no banco
-    
     return True, "Consulta validada com sucesso"
 
 def improve_model(query, sql, feedback, details=None):
     """Melhora o modelo com base no feedback"""
-    
     # Registrar feedback
     _log_feedback(query, sql, feedback, details)
-    
+
     # Se for feedback positivo, considerar adicionar à Gold List
     if feedback == "positive" and query and sql:
         gold_list = _get_gold_list()
-        
         # Verificar se consulta similar já existe na Gold List
         existing = False
         for item in gold_list:
             if query.lower() == item["query"].lower():
                 existing = True
                 break
-        
         if not existing:
             gold_list.append({
                 "query": query,
                 "sql": sql,
                 "added_at": datetime.now().isoformat()
             })
-            
             # Limitar a lista a 100 exemplos
             if len(gold_list) > 100:
                 gold_list = gold_list[-100:]
-            
             _save_gold_list(gold_list)
-    
+
     # Em uma implementação real, você poderia treinar incrementalmente o modelo
     # ou ajustar os prompts com base no feedback acumulado
