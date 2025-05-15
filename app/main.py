@@ -5,8 +5,6 @@ import plotly.graph_objects as go
 import os
 import yaml
 import base64
-# Comentado para evitar erro se não existir
-# from PIL import Image 
 
 # Importação dos módulos do sistema
 from auth import authenticate_user, create_user, is_authenticated
@@ -14,6 +12,11 @@ from database import connect_database, execute_query, test_connection
 from nlp_engine import natural_to_sql, validate_query, improve_model
 from visualizations import create_visualization, export_visualization
 from utils import save_query, get_history, add_to_gold_list, get_gold_list
+# Importar componentes UI customizados
+from ui_components import (
+    load_css, card, metric_card, styled_table, 
+    styled_plotly_chart, notification, gradient_header, custom_button
+)
 
 # Configuração da página
 st.set_page_config(
@@ -23,6 +26,8 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+# Carregar CSS personalizado
+load_css()
 # Carregamento do CSS personalizado
 def load_css():
     try:
@@ -57,38 +62,55 @@ def display_logo():
 def main_page():
     display_logo()
     
-    st.markdown("""
-    # Bem-vindo ao NeoQuery AI
-    
-    Consulte seus dados em linguagem natural e obtenha insights poderosos sem precisar escrever uma linha de SQL.
-    """)
+    st.markdown(
+        card(
+            "Bem-vindo ao NeoQuery AI",
+            """
+            <p>Consulte seus dados em linguagem natural e obtenha insights poderosos 
+            sem precisar escrever uma linha de SQL.</p>
+            """,
+            icon="database"
+        ), 
+        unsafe_allow_html=True
+    )
     
     col1, col2 = st.columns(2)
     
     with col1:
-        st.markdown("""
-        ## Como funciona
-        1. Conecte seu banco de dados
-        2. Digite sua pergunta em linguagem natural
-        3. Receba resultados instantâneos com visualizações
-        4. Salve e compartilhe seus insights
-        """)
+        st.markdown(
+            card(
+                "Como funciona",
+                """
+                <ol>
+                    <li>Conecte seu banco de dados</li>
+                    <li>Digite sua pergunta em linguagem natural</li>
+                    <li>Receba resultados instantâneos com visualizações</li>
+                    <li>Salve e compartilhe seus insights</li>
+                </ol>
+                """,
+                icon="info-circle"
+            ),
+            unsafe_allow_html=True
+        )
     
     with col2:
-        # Substituir o vídeo por uma descrição ou imagem de placeholder
-        st.markdown("""
-        <div style="background-color: #f8f9fa; padding: 20px; border-radius: 5px; text-align: center;">
-            <h3 style="color: #2c3e50;">Demonstração em Vídeo</h3>
-            <p>Assista à demonstração para ver como transformar perguntas simples em consultas SQL poderosas.</p>
-            <p style="color: #7f8c8d; font-size: 0.9em;">Vídeo indisponível no momento. Será adicionado em breve.</p>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(
+            card(
+                "Demonstração em Vídeo",
+                """
+                <div style="text-align: center;">
+                    <p>Assista à demonstração para ver como transformar perguntas simples em consultas SQL poderosas.</p>
+                    <p style="color: #7f8c8d; font-size: 0.9em;">Vídeo indisponível no momento. Será adicionado em breve.</p>
+                </div>
+                """,
+                icon="play-circle"
+            ),
+            unsafe_allow_html=True
+        )
         
-        # Explicação em texto do que seria mostrado no vídeo
         with st.expander("Ver descrição da demonstração"):
             st.markdown("""
             **Na demonstração em vídeo, você veria:**
-            
             1. Um usuário conectando seu banco de dados PostgreSQL
             2. Digitando a pergunta "Quais foram os 5 clientes que mais compraram no último trimestre?"
             3. O sistema convertendo isso em SQL complexo com joins e agregações
@@ -98,50 +120,70 @@ def main_page():
     
     st.markdown("---")
     
-    st.markdown("""
-    ## Planos
-    
-    Escolha o plano que melhor atende às necessidades da sua empresa:
-    """)
+    st.markdown("<h2>Planos</h2>", unsafe_allow_html=True)
+    st.markdown("<p>Escolha o plano que melhor atende às necessidades da sua empresa:</p>", unsafe_allow_html=True)
     
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        st.markdown("""
-        ### Básico
-        **R$199/mês**
-        - Até 3 usuários
-        - 100 consultas/mês
-        - 1 conexão de banco de dados
-        - Suporte por e-mail
-        """)
+        st.markdown(
+            card(
+                "Básico",
+                """
+                <h3 style="color: #3498db; text-align: center;">R$199/mês</h3>
+                <ul>
+                    <li>Até 3 usuários</li>
+                    <li>100 consultas/mês</li>
+                    <li>1 conexão de banco de dados</li>
+                    <li>Suporte por e-mail</li>
+                </ul>
+                """,
+                icon="star"
+            ),
+            unsafe_allow_html=True
+        )
         st.button("Assinar Plano Básico", key="basic_plan")
     
     with col2:
-        st.markdown("""
-        ### Profissional
-        **R$499/mês**
-        - Até 10 usuários
-        - 500 consultas/mês
-        - 3 conexões de banco de dados
-        - Suporte prioritário
-        - Exportação em múltiplos formatos
-        """)
+        st.markdown(
+            card(
+                "Profissional",
+                """
+                <h3 style="color: #3498db; text-align: center;">R$499/mês</h3>
+                <ul>
+                    <li>Até 10 usuários</li>
+                    <li>500 consultas/mês</li>
+                    <li>3 conexões de banco de dados</li>
+                    <li>Suporte prioritário</li>
+                    <li>Exportação em múltiplos formatos</li>
+                </ul>
+                """,
+                icon="gem"
+            ),
+            unsafe_allow_html=True
+        )
         st.button("Assinar Plano Profissional", key="pro_plan", type="primary")
     
     with col3:
-        st.markdown("""
-        ### Empresarial
-        **R$999/mês**
-        - Usuários ilimitados
-        - Consultas ilimitadas
-        - Conexões ilimitadas
-        - Suporte 24/7
-        - API avançada
-        - Treinamento personalizado
-        """)
+        st.markdown(
+            card(
+                "Empresarial",
+                """
+                <h3 style="color: #3498db; text-align: center;">R$999/mês</h3>
+                <ul>
+                    <li>Usuários ilimitados</li>
+                    <li>Consultas ilimitadas</li>
+                    <li>Conexões ilimitadas</li>
+                    <li>Suporte 24/7</li>
+                    <li>API avançada</li>
+                    <li>Treinamento personalizado</li>
+                </ul>
+                """,
+                icon="building"
+            ),
+            unsafe_allow_html=True
+        )
         st.button("Assinar Plano Empresarial", key="enterprise_plan")
-
 # Função para a página de login
 def login_page():
     display_logo()
